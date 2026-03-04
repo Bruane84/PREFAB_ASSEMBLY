@@ -72,6 +72,8 @@ namespace TeklaGroupFinder
             statusLabel.Text = $"Signature '{groupName}' Created.";
         }
 
+        private const double ProximityLimitMm = 200.0;
+
         private async void findMatchesButton_Click(object sender, EventArgs e)
         {
             if (MyModel == null || !MyModel.GetConnectionStatus()) return;
@@ -85,45 +87,54 @@ namespace TeklaGroupFinder
             var signatureProfiles = new HashSet<string>(
                 signatures.Select(s => s.PostProfile.Trim().ToUpper()));
 
-            var targetAssemblies = new List<Assembly>();
-            var seenIds = new HashSet<int>();
+            var targetPosts = new List<Part>();
+            var targetPlates = new List<ContourPlate>();
             var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(ModelObject.ModelObjectEnum.PART);
             while (iter.MoveNext())
             {
-                if (iter.Current is Part part)
+                if (iter.Current is ContourPlate cp)
+                    targetPlates.Add(cp);
+                else if (iter.Current is Part part)
                 {
                     string profileKey = part.Profile.ProfileString.Trim().ToUpper();
                     if (signatureProfiles.Contains(profileKey))
-                    {
-                        Assembly assy = part.GetAssembly() as Assembly;
-                        if (assy != null && seenIds.Add(assy.Identifier.ID))
-                            targetAssemblies.Add(assy);
-                    }
+                        targetPosts.Add(part);
                 }
             }
 
             processingProgressBar.Visible = true;
-            processingProgressBar.Maximum = targetAssemblies.Count;
+            processingProgressBar.Maximum = targetPosts.Count;
             int matchCount = 0;
             double.TryParse(toleranceTextBox.Text, out double globalTol);
 
             await System.Threading.Tasks.Task.Run(() =>
             {
-                for (int i = 0; i < targetAssemblies.Count; i++)
+                for (int i = 0; i < targetPosts.Count; i++)
                 {
                     this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
-                    Assembly assy = targetAssemblies[i];
-                    Part main = assy.GetMainPart() as Part;
-                    ContourPlate plate = null;
-                    foreach (object sec in assy.GetSecondaries()) if (sec is ContourPlate cp) { plate = cp; break; }
+                    Part main = targetPosts[i];
+                    Point topNode = GetPostTopNode(main);
 
-                    if (main == null || plate == null) continue;
+                    ContourPlate plate = null;
+                    double minDist = double.MaxValue;
+                    foreach (ContourPlate cp in targetPlates)
+                    {
+                        Point plateCog = GetPartCog(cp);
+                        var proximityVector = new Vector(plateCog.X - topNode.X, plateCog.Y - topNode.Y, plateCog.Z - topNode.Z);
+                        double dist = proximityVector.GetLength();
+                        if (dist < ProximityLimitMm && dist < minDist)
+                        {
+                            minDist = dist;
+                            plate = cp;
+                        }
+                    }
+
+                    if (plate == null) continue;
 
                     string postProf = GetProperty(main, "PROFILE");
                     string plateProf = GetProperty(plate, "PROFILE");
-                    Point refNode = GetPostTopNode(main);
-                    var corners = GetCornerDistances(plate, refNode);
-                    var voids = GetVoidDistances(plate, refNode);
+                    var corners = GetCornerDistances(plate, topNode);
+                    var voids = GetVoidDistances(plate, topNode);
 
                     foreach (var sig in signatures)
                     {
@@ -137,6 +148,12 @@ namespace TeklaGroupFinder
                             break;
                         }
                     }
+
+                    // To create a new Assembly grouping the post and plate together (for future reference):
+                    // Assembly newAssembly = new Assembly();
+                    // newAssembly.SetMainPart(main);
+                    // newAssembly.Add(plate);
+                    // newAssembly.Insert();
                 }
             });
 
