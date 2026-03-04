@@ -199,6 +199,8 @@ namespace TeklaGroupFinder
                         {
                             main.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
                             main.Modify();
+                            bestPlate.Plate.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
+                            bestPlate.Plate.Modify();
                             matchCount++;
                             break;
                         }
