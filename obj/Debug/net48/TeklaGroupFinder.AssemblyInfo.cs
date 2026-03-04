@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyCopyrightAttribute("Copyright © 2025")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0.0+296c5dcba0da1d5866ecb44d24cfbae68090583e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0.0+f09d64099ed017c7efa1502e9b1ad7a0c7f6d508")]
 [assembly: System.Reflection.AssemblyProductAttribute("MegaPanelPost Grouping")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TeklaGroupFinder")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
