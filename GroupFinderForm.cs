@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,11 +18,13 @@ namespace TeklaGroupFinder
         {
             InitializeComponent();
             MyModel = new Model();
-            if (MyModel.GetConnectionStatus()){
+            if (MyModel.GetConnectionStatus())
+            {
                 connectionStatusPanel.BackColor = System.Drawing.Color.Green;
                 statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
             }
-            else{
+            else
+            {
                 connectionStatusPanel.BackColor = System.Drawing.Color.Red;
                 statusLabel.Text = "Not connected. Please open a Tekla model.";
             }
@@ -52,7 +54,7 @@ namespace TeklaGroupFinder
             double.TryParse(toleranceTextBox.Text, out double distTolerance);
 
             GetPostEndpoints(mainPost, out Point startPt, out Point endPt);
-            Point capCog  = GetPartCog(capPlate);
+            Point capCog = GetPartCog(capPlate);
             Point refNode = Distance.PointToPoint(startPt, capCog) <= Distance.PointToPoint(endPt, capCog) ? startPt : endPt;
 
             double volume = 0;
@@ -79,7 +81,7 @@ namespace TeklaGroupFinder
         }
 
         private const double ProximityLimitMm = 200.0;
-        private const double VolumeToleranceMm3 = 1000.0;
+        private const double VolumeToleranceMm3 = 2000.0;
         private const int ProgressUpdateInterval = 25;
 
         private class PlateCache
@@ -170,7 +172,7 @@ namespace TeklaGroupFinder
                     foreach (PlateCache pc in plateCaches)
                     {
                         double distStartSq = DistanceSquared(pc.Cog, startPt);
-                        double distEndSq   = DistanceSquared(pc.Cog, endPt);
+                        double distEndSq = DistanceSquared(pc.Cog, endPt);
                         double distSq = Math.Min(distStartSq, distEndSq);
                         if (distSq < proxLimitSq && distSq < minDistSq)
                         {
@@ -242,7 +244,7 @@ namespace TeklaGroupFinder
             return true;
         }
 
-        private string GetDataPath() => Path.Combine("J:\", projectNumberTextBox.Text, "600 QA and QC", "608 Internal Documents", "MegaPanelPreFabGroup");
+        private string GetDataPath() => Path.Combine("J:\\", projectNumberTextBox.Text, "600 QA and QC", "608 Internal Documents", "MegaPanelPreFabGroup");
 
         private string GetProperty(Part p, string n) { string v = ""; p.GetReportProperty(n, ref v); return v; }
 
@@ -324,3 +326,4 @@ namespace TeklaGroupFinder
         public int PartCount { get; set; }
         public double DistanceTolerance { get; set; }
     }
+}
