@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,161 +17,128 @@ namespace TeklaGroupFinder
         public GroupFinderForm()
         {
             InitializeComponent();
-
-            try
+            MyModel = new Model();
+            if (MyModel.GetConnectionStatus())
             {
-                Model MyModel = new Model();
-                if (MyModel.GetConnectionStatus())
-                {
-                    connectionStatusPanel.BackColor = System.Drawing.Color.Green;
-                    statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
-                }
-                else
-                {
-                    connectionStatusPanel.BackColor = System.Drawing.Color.Red;
-                    statusLabel.Text = "Not connected. Please open a Tekla model.";
-                }
+                connectionStatusPanel.BackColor = System.Drawing.Color.Green;
+                statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
             }
-            catch (Exception ex)
+            else
             {
                 connectionStatusPanel.BackColor = System.Drawing.Color.Red;
-                statusLabel.Text = "Connection failed.";
-                MessageBox.Show("Error connecting to Tekla: " + ex.Message, "Connection Error");
+                statusLabel.Text = "Not connected. Please open a Tekla model.";
             }
         }
 
         private void createSignatureButton_Click(object sender, EventArgs e)
         {
-            if (!MyModel.GetConnectionStatus())
-            {
-                MessageBox.Show("Not connected to a Tekla Structures model.", "Connection Error");
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(projectNumberTextBox.Text))
-            {
-                MessageBox.Show("Please enter a Project Number first.", "Input Required");
-                return;
-            }
+            if (MyModel == null || !MyModel.GetConnectionStatus()) return;
 
-            statusLabel.Text = "Select parts in the model...";
-            this.Refresh();
             var picker = new Picker();
-            ModelObjectEnumerator selectedObjects;
-            try
+            var selected = picker.PickObjects(Picker.PickObjectsEnum.PICK_N_PARTS, "Select Post and Cap Plate");
+            var parts = new List<Part>();
+            while (selected.MoveNext()) if (selected.Current is Part p) parts.Add(p);
+
+            Part mainPost = parts.FirstOrDefault(p => !(p is ContourPlate));
+            ContourPlate capPlate = parts.OfType<ContourPlate>().FirstOrDefault();
+
+            if (mainPost == null || capPlate == null)
             {
-                selectedObjects = picker.PickObjects(Picker.PickObjectsEnum.PICK_N_PARTS,
-                                                     "Select the sample group of parts");
-            }
-            catch (Exception)
-            {
-                statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
-                return;
-            }
-            if (selectedObjects.GetSize() < 2)
-            {
-                MessageBox.Show("Please select at least 2 parts.", "Selection Error");
-                statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
+                MessageBox.Show("Selection must include a post and a ContourPlate.", "Selection Error");
                 return;
             }
 
-            var partsData = new List<Tuple<Part, Tekla.Structures.Geometry3d.Point>>();
-            while (selectedObjects.MoveNext())
-            {
-                if (selectedObjects.Current is Part part)
-                {
-                    partsData.Add(new Tuple<Part, Tekla.Structures.Geometry3d.Point>(part, GetPartCog(part)));
-                }
-            }
-
-            var groupName = Prompt("Enter Signature Name",
-                                   "Please enter a name for this group signature:",
-                                   "Group_Signature");
+            var groupName = Prompt("New Signature", "Enter Signature Name:", "Type_1");
             if (string.IsNullOrEmpty(groupName)) return;
+
+            double.TryParse(toleranceTextBox.Text, out double distTolerance);
+            Point refNode = GetPostTopNode(mainPost);
 
             var signature = new GroupSignature
             {
                 GroupName = groupName,
-                PartCount = partsData.Count,
-                Tolerance = Convert.ToDouble(toleranceTextBox.Text),
-                Parts = partsData.Select(p => GetPartProperties(p.Item1)).ToList(),
-                Distances = CalculateSortedDistances(partsData.Select(p => p.Item2).ToList())
+                PostProfile = GetProperty(mainPost, "PROFILE"),
+                CapPlateProfile = GetProperty(capPlate, "PROFILE"),
+                CornerDistances = GetCornerDistances(capPlate, refNode),
+                VoidDistances = GetVoidDistances(capPlate, refNode),
+                PartCount = parts.Count,
+                DistanceTolerance = distTolerance > 0 ? distTolerance : 2.0
             };
 
-            var projectNumber = projectNumberTextBox.Text;
-            var pluginDataBasePath = @"C:\TeklaGroupFinderData";
-            var projectFolderPath = Path.Combine(pluginDataBasePath, projectNumber);
-            Directory.CreateDirectory(projectFolderPath);
-            var filePath = Path.Combine(projectFolderPath, $"{groupName}.json");
-            File.WriteAllText(filePath, JsonConvert.SerializeObject(signature, Formatting.Indented));
+            var path = GetDataPath();
+            Directory.CreateDirectory(path);
+            File.WriteAllText(Path.Combine(path, $"{groupName}.json"), JsonConvert.SerializeObject(signature, Formatting.Indented));
 
-            statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
-            MessageBox.Show($"Successfully created signature file:\n{filePath}", "Success");
+            statusLabel.Text = $"Signature '{groupName}' Created.";
         }
 
-        private void findMatchesButton_Click(object sender, EventArgs e)
+        private async void findMatchesButton_Click(object sender, EventArgs e)
         {
-            if (MyModel == null || !MyModel.GetConnectionStatus())
-            {
-                MessageBox.Show("Not connected to a Tekla Structures model.", "Connection Error");
-                return;
-            }
+            if (MyModel == null || !MyModel.GetConnectionStatus()) return;
+            var path = GetDataPath();
 
-            MessageBox.Show("For this demonstration, please select a group of parts to form a sub-assembly.",
-                            "Demonstration Step");
+            if (!Directory.Exists(path)) return;
 
-            var picker = new Picker();
-            ModelObjectEnumerator aGroupToProcess;
-            try
-            {
-                aGroupToProcess = picker.PickObjects(Picker.PickObjectsEnum.PICK_N_PARTS,
-                                                     "Select parts to form a sub-assembly");
-            }
-            catch (Exception)
-            {
-                statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
-                return;
-            }
+            var signatures = Directory.GetFiles(path, "*.json")
+                .Select(f => JsonConvert.DeserializeObject<GroupSignature>(File.ReadAllText(f))).ToList();
 
-            if (aGroupToProcess.GetSize() > 1 && createSubAssemblyCheckBox.Checked)
+            var targetAssemblies = new List<Assembly>();
+            var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(ModelObject.ModelObjectEnum.ASSEMBLY);
+            while (iter.MoveNext())
             {
-                var partsToGroup = new ArrayList();
-                Part mainPart = null;
-                while (aGroupToProcess.MoveNext())
+                if (iter.Current is Assembly assy)
                 {
-                    if (aGroupToProcess.Current is Part part)
+                    bool hasCapPlate = false;
+                    foreach (object sec in assy.GetSecondaries())
                     {
-                        partsToGroup.Add(part);
-                        if (mainPart == null) mainPart = part;
+                        if (sec is ContourPlate) { hasCapPlate = true; break; }
+                    }
+                    if (hasCapPlate) targetAssemblies.Add(assy);
+                }
+            }
+
+            processingProgressBar.Visible = true;
+            processingProgressBar.Maximum = targetAssemblies.Count;
+            int matchCount = 0;
+            double.TryParse(toleranceTextBox.Text, out double globalTol);
+
+            await System.Threading.Tasks.Task.Run(() =>
+            {
+                for (int i = 0; i < targetAssemblies.Count; i++)
+                {
+                    this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
+                    Assembly assy = targetAssemblies[i];
+                    Part main = assy.GetMainPart() as Part;
+                    ContourPlate plate = null;
+                    foreach (object sec in assy.GetSecondaries()) if (sec is ContourPlate cp) { plate = cp; break; }
+
+                    if (main == null || plate == null) continue;
+
+                    string postProf = GetProperty(main, "PROFILE");
+                    string plateProf = GetProperty(plate, "PROFILE");
+                    Point refNode = GetPostTopNode(main);
+                    var corners = GetCornerDistances(plate, refNode);
+                    var voids = GetVoidDistances(plate, refNode);
+
+                    foreach (var sig in signatures)
+                    {
+                        double activeTol = sig.DistanceTolerance > 0 ? sig.DistanceTolerance : globalTol;
+
+                        if (DoSignaturesMatch(sig, postProf, plateProf, corners, voids, activeTol))
+                        {
+                            main.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
+                            main.Modify();
+                            matchCount++;
+                            break;
+                        }
                     }
                 }
+            });
 
-                var parentAssembly = mainPart?.GetAssembly();
-                if (parentAssembly == null)
-                {
-                    MessageBox.Show("Could not find the parent assembly.", "Error");
-                    return;
-                }
-
-                var newSubAssembly = new Assembly { Name = "GROUP_ASSEMBLY" };
-                newSubAssembly.SetMainPart(mainPart);
-                for (int i = 1; i < partsToGroup.Count; i++)
-                {
-                    newSubAssembly.Add(partsToGroup[i] as Part);
-                }
-
-                if (!newSubAssembly.Insert())
-                {
-                    MessageBox.Show("Failed to create sub-assembly.", "Error");
-                }
-                else
-                {
-                    parentAssembly.Modify();
-                }
-            }
-
-            MyModel.CommitChanges("Sub-assemblies created by Group Finder application.");
-            statusLabel.Text = "Connected to: " + MyModel.GetInfo().ModelName;
-            MessageBox.Show("Demonstration finished. Parts have been grouped.", "Process Complete");
+            MyModel.CommitChanges("Posts Grouped.");
+            processingProgressBar.Visible = false;
+            statusLabel.Text = $"Tagged {matchCount} posts.";
+            MessageBox.Show($"Search complete. {matchCount} matches found.", "Result");
         }
 
         private void openCatalogueButton_Click(object sender, EventArgs e)
@@ -181,67 +147,75 @@ namespace TeklaGroupFinder
         }
 
         #region Helper Methods
-        private Tekla.Structures.Geometry3d.Point GetPartCog(Part part)
+        private bool DoSignaturesMatch(GroupSignature s, string postP, string plateP, List<double> c, List<double> v, double t)
         {
-            double cogX = 0, cogY = 0, cogZ = 0;
-            part.GetReportProperty("COG_X", ref cogX);
-            part.GetReportProperty("COG_Y", ref cogY);
-            part.GetReportProperty("COG_Z", ref cogZ);
-            return new Tekla.Structures.Geometry3d.Point(cogX, cogY, cogZ);
+            if (s.PostProfile.Trim().ToUpper() != postP.Trim().ToUpper() ||
+                s.CapPlateProfile.Trim().ToUpper() != plateP.Trim().ToUpper()) return false;
+
+            if (s.CornerDistances.Count != c.Count || s.VoidDistances.Count != v.Count) return false;
+
+            for (int i = 0; i < c.Count; i++)
+                if (Math.Abs(s.CornerDistances[i] - c[i]) > t) return false;
+
+            for (int i = 0; i < v.Count; i++)
+                if (Math.Abs(s.VoidDistances[i] - v[i]) > t) return false;
+
+            return true;
         }
 
-        private Dictionary<string, string> GetPartProperties(Part part)
+        private string GetDataPath() => Path.Combine("J:\\", projectNumberTextBox.Text, "600 QA and QC", "608 Internal Documents", "MegaPanelPreFabGroup");
+
+        private string GetProperty(Part p, string n) { string v = ""; p.GetReportProperty(n, ref v); return v; }
+
+        private Point GetReportPoint(Part p, string prefix)
         {
-            var props = new Dictionary<string, string>();
-            string profile = "", grade = "";
-            part.GetReportProperty("PROFILE", ref profile);
-            part.GetReportProperty("MATERIAL_GRADE", ref grade);
-            props.Add("Profile", profile);
-            props.Add("Grade", grade);
-            return props;
+            double x = 0, y = 0, z = 0;
+            p.GetReportProperty(prefix + "_X", ref x);
+            p.GetReportProperty(prefix + "_Y", ref y);
+            p.GetReportProperty(prefix + "_Z", ref z);
+            return new Point(x, y, z);
         }
 
-        private List<double> CalculateSortedDistances(List<Tekla.Structures.Geometry3d.Point> cogs)
+        private Point GetPostTopNode(Part post)
         {
-            var distances = new List<double>();
-            for (int i = 0; i < cogs.Count; i++)
-            {
-                for (int j = i + 1; j < cogs.Count; j++)
-                {
-                    distances.Add(Math.Round(
-                        Tekla.Structures.Geometry3d.Distance.PointToPoint(cogs[i], cogs[j]), 2));
-                }
-            }
-            distances.Sort();
-            return distances;
+            return GetReportPoint(post, "END");
         }
 
-        public static string Prompt(string title, string promptText, string defaultValue)
+        private List<double> GetCornerDistances(ContourPlate p, Point r)
         {
-            Form prompt = new Form()
-            {
-                Width = 500,
-                Height = 150,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                Text = title,
-                StartPosition = FormStartPosition.CenterScreen
-            };
-            Label textLabel = new Label() { Left = 50, Top = 20, Text = promptText, Width = 400 };
-            TextBox textBox = new TextBox() { Left = 50, Top = 50, Width = 400, Text = defaultValue };
-            Button confirmation = new Button()
-            {
-                Text = "Ok",
-                Left = 350,
-                Width = 100,
-                Top = 80,
-                DialogResult = DialogResult.OK
-            };
-            confirmation.Click += (sender, e) => { prompt.Close(); };
-            prompt.Controls.Add(textBox);
-            prompt.Controls.Add(confirmation);
-            prompt.Controls.Add(textLabel);
-            prompt.AcceptButton = confirmation;
-            return prompt.ShowDialog() == DialogResult.OK ? textBox.Text : "";
+            var d = new List<double>();
+            foreach (ContourPoint cp in p.Contour.ContourPoints)
+                d.Add(Math.Round(Distance.PointToPoint(r, new Point(cp.X, cp.Y, cp.Z)), 1));
+            d.Sort(); return d;
+        }
+
+        private List<double> GetVoidDistances(Part p, Point r)
+        {
+            var d = new List<double>();
+            var bools = p.GetBooleans();
+            while (bools.MoveNext()) if (bools.Current is BooleanPart bp) d.Add(Math.Round(Distance.PointToPoint(r, GetPartCog(bp.OperativePart)), 1));
+            var bolts = p.GetBolts();
+            while (bolts.MoveNext()) if (bolts.Current is BoltGroup bg) foreach (Point pos in bg.BoltPositions) d.Add(Math.Round(Distance.PointToPoint(r, pos), 1));
+            d.Sort(); return d;
+        }
+
+        private Point GetPartCog(ModelObject m)
+        {
+            double x = 0, y = 0, z = 0;
+            m.GetReportProperty("COG_X", ref x);
+            m.GetReportProperty("COG_Y", ref y);
+            m.GetReportProperty("COG_Z", ref z);
+            return new Point(x, y, z);
+        }
+
+        public static string Prompt(string t, string msg, string def)
+        {
+            Form f = new Form() { Width = 300, Height = 150, Text = t, StartPosition = FormStartPosition.CenterScreen, TopMost = true };
+            Label lbl = new Label() { Left = 10, Top = 15, Width = 275, Text = msg };
+            TextBox txt = new TextBox() { Left = 50, Top = 40, Width = 200, Text = def };
+            Button b = new Button() { Text = "OK", Left = 110, Top = 80, DialogResult = DialogResult.OK };
+            f.Controls.Add(lbl); f.Controls.Add(txt); f.Controls.Add(b);
+            return f.ShowDialog() == DialogResult.OK ? txt.Text : "";
         }
         #endregion
     }
@@ -249,9 +223,11 @@ namespace TeklaGroupFinder
     public class GroupSignature
     {
         public string GroupName { get; set; }
+        public string PostProfile { get; set; }
+        public string CapPlateProfile { get; set; }
+        public List<double> CornerDistances { get; set; }
+        public List<double> VoidDistances { get; set; }
         public int PartCount { get; set; }
-        public List<Dictionary<string, string>> Parts { get; set; }
-        public List<double> Distances { get; set; }
-        public double Tolerance { get; set; }
+        public double DistanceTolerance { get; set; }
     }
 }
