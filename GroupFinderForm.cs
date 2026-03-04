@@ -96,7 +96,7 @@ namespace TeklaGroupFinder
 
             var targetPosts = new List<Part>();
             var targetPlates = new List<ContourPlate>();
-            var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(ModelObject.ModelObjectEnum.PART);
+            var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(new Type[] { typeof(Part) });
             while (iter.MoveNext())
             {
                 if (iter.Current is ContourPlate cp)
