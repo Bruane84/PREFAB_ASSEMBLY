@@ -63,8 +63,10 @@ namespace TeklaGroupFinder
             var signature = new GroupSignature
             {
                 GroupName = groupName,
-                PostProfile = GetProperty(mainPost, "PROFILE"),
-                CapPlateProfile = GetProperty(capPlate, "PROFILE"),
+                PostProfile = mainPost.Profile.ProfileString,
+                CapPlateProfile = capPlate.Profile.ProfileString,
+                PostName = mainPost.Name,
+                CapPlateName = capPlate.Name,
                 CornerDistances = GetCornerDistances(capPlate, refNode),
                 CapPlateVolume = volume,
                 PartCount = parts.Count,
@@ -91,8 +93,10 @@ namespace TeklaGroupFinder
             var signatures = Directory.GetFiles(path, "*.json")
                 .Select(f => JsonConvert.DeserializeObject<GroupSignature>(File.ReadAllText(f))).ToList();
 
-            var signatureProfiles = new HashSet<string>(
-                signatures.Select(s => s.PostProfile.Trim().ToUpper()));
+            var validPostProfiles = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.PostProfile)).Select(s => s.PostProfile.Trim().ToUpper()));
+            var validPlateProfiles = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.CapPlateProfile)).Select(s => s.CapPlateProfile.Trim().ToUpper()));
+            var validPostNames = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.PostName)).Select(s => s.PostName.Trim().ToUpper()));
+            var validPlateNames = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.CapPlateName)).Select(s => s.CapPlateName.Trim().ToUpper()));
 
             var targetPosts = new List<Part>();
             var targetPlates = new List<ContourPlate>();
@@ -100,11 +104,17 @@ namespace TeklaGroupFinder
             while (iter.MoveNext())
             {
                 if (iter.Current is ContourPlate cp)
-                    targetPlates.Add(cp);
+                {
+                    string profileKey = cp.Profile.ProfileString.Trim().ToUpper();
+                    string nameKey = cp.Name?.Trim().ToUpper() ?? "";
+                    if (validPlateProfiles.Contains(profileKey) && (validPlateNames.Count == 0 || validPlateNames.Contains(nameKey)))
+                        targetPlates.Add(cp);
+                }
                 else if (iter.Current is Part part)
                 {
-                    string profileKey = GetProperty(part, "PROFILE").Trim().ToUpper();
-                    if (signatureProfiles.Contains(profileKey))
+                    string profileKey = part.Profile.ProfileString.Trim().ToUpper();
+                    string nameKey = part.Name?.Trim().ToUpper() ?? "";
+                    if (validPostProfiles.Contains(profileKey) && (validPostNames.Count == 0 || validPostNames.Contains(nameKey)))
                         targetPosts.Add(part);
                 }
             }
@@ -141,8 +151,10 @@ namespace TeklaGroupFinder
 
                     if (plate == null) continue;
 
-                    string postProf = GetProperty(main, "PROFILE");
-                    string plateProf = GetProperty(plate, "PROFILE");
+                    string postProf = main.Profile.ProfileString;
+                    string postName = main.Name;
+                    string plateProf = plate.Profile.ProfileString;
+                    string plateName = plate.Name;
                     var corners = GetCornerDistances(plate, postNode);
                     double plateVolume = 0;
                     plate.GetReportProperty("VOLUME", ref plateVolume);
@@ -151,7 +163,7 @@ namespace TeklaGroupFinder
                     {
                         double activeTol = sig.DistanceTolerance > 0 ? sig.DistanceTolerance : globalTol;
 
-                        if (DoSignaturesMatch(sig, postProf, plateProf, plateVolume, corners, activeTol))
+                        if (DoSignaturesMatch(sig, postName, postProf, plateName, plateProf, plateVolume, corners, activeTol))
                         {
                             main.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
                             main.Modify();
@@ -180,10 +192,13 @@ namespace TeklaGroupFinder
         }
 
         #region Helper Methods
-        private bool DoSignaturesMatch(GroupSignature s, string postP, string plateP, double volume, List<double> c, double t)
+        private bool DoSignaturesMatch(GroupSignature s, string postN, string postP, string plateN, string plateP, double volume, List<double> c, double t)
         {
             if (s.PostProfile.Trim().ToUpper() != postP.Trim().ToUpper() ||
                 s.CapPlateProfile.Trim().ToUpper() != plateP.Trim().ToUpper()) return false;
+
+            if (!string.IsNullOrEmpty(s.PostName) && s.PostName.Trim().ToUpper() != (postN ?? "").Trim().ToUpper()) return false;
+            if (!string.IsNullOrEmpty(s.CapPlateName) && s.CapPlateName.Trim().ToUpper() != (plateN ?? "").Trim().ToUpper()) return false;
 
             if (Math.Abs(s.CapPlateVolume - volume) > VolumeToleranceMm3) return false;
 
@@ -262,6 +277,8 @@ namespace TeklaGroupFinder
         public string GroupName { get; set; }
         public string PostProfile { get; set; }
         public string CapPlateProfile { get; set; }
+        public string PostName { get; set; }
+        public string CapPlateName { get; set; }
         public List<double> CornerDistances { get; set; }
         public double CapPlateVolume { get; set; }
         public int PartCount { get; set; }
