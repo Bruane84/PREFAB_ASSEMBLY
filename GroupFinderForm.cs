@@ -178,7 +178,9 @@ namespace TeklaGroupFinder
 
         private Point GetPostTopNode(Part post)
         {
-            return GetReportPoint(post, "END");
+            var start = GetReportPoint(post, "START");
+            var end = GetReportPoint(post, "END");
+            return end.Z >= start.Z ? end : start;
         }
 
         private List<double> GetCornerDistances(ContourPlate p, Point r)
