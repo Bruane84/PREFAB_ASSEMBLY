@@ -82,6 +82,25 @@ namespace TeklaGroupFinder
 
         private const double ProximityLimitMm = 200.0;
         private const double VolumeToleranceMm3 = 0.5;
+        private const int ProgressUpdateInterval = 25;
+
+        private class PlateCache
+        {
+            public ContourPlate Plate { get; set; }
+            public Point Cog { get; set; }
+            public string Profile { get; set; }
+            public string Name { get; set; }
+            public double Volume { get; set; }
+        }
+
+        private class PostCache
+        {
+            public Part Post { get; set; }
+            public Point StartPoint { get; set; }
+            public Point EndPoint { get; set; }
+            public string Profile { get; set; }
+            public string Name { get; set; }
+        }
 
         private async void findMatchesButton_Click(object sender, EventArgs e)
         {
@@ -98,8 +117,8 @@ namespace TeklaGroupFinder
             var validPostNames = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.PostName)).Select(s => s.PostName.Trim().ToUpper()));
             var validPlateNames = new HashSet<string>(signatures.Where(s => !string.IsNullOrEmpty(s.CapPlateName)).Select(s => s.CapPlateName.Trim().ToUpper()));
 
-            var targetPosts = new List<Part>();
-            var targetPlates = new List<ContourPlate>();
+            var targetPosts = new List<PostCache>();
+            var rawPlates = new List<ContourPlate>();
             var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(new Type[] { typeof(Part) });
             while (iter.MoveNext())
             {
@@ -108,56 +127,69 @@ namespace TeklaGroupFinder
                     string profileKey = cp.Profile.ProfileString.Trim().ToUpper();
                     string nameKey = cp.Name?.Trim().ToUpper() ?? "";
                     if (validPlateProfiles.Contains(profileKey) && (validPlateNames.Count == 0 || validPlateNames.Contains(nameKey)))
-                        targetPlates.Add(cp);
+                        rawPlates.Add(cp);
                 }
                 else if (iter.Current is Part part)
                 {
                     string profileKey = part.Profile.ProfileString.Trim().ToUpper();
                     string nameKey = part.Name?.Trim().ToUpper() ?? "";
                     if (validPostProfiles.Contains(profileKey) && (validPostNames.Count == 0 || validPostNames.Contains(nameKey)))
-                        targetPosts.Add(part);
+                    {
+                        GetPostEndpoints(part, out Point startPt, out Point endPt);
+                        targetPosts.Add(new PostCache { Post = part, StartPoint = startPt, EndPoint = endPt, Profile = part.Profile.ProfileString, Name = part.Name });
+                    }
                 }
             }
+
+            var plateCaches = rawPlates.Select(cp =>
+            {
+                double vol = 0;
+                cp.GetReportProperty("VOLUME", ref vol);
+                return new PlateCache { Plate = cp, Cog = GetPartCog(cp), Profile = cp.Profile.ProfileString, Name = cp.Name, Volume = vol };
+            }).ToList();
 
             processingProgressBar.Visible = true;
             processingProgressBar.Maximum = targetPosts.Count;
             int matchCount = 0;
             double.TryParse(toleranceTextBox.Text, out double globalTol);
+            double proxLimitSq = ProximityLimitMm * ProximityLimitMm;
 
             await System.Threading.Tasks.Task.Run(() =>
             {
                 for (int i = 0; i < targetPosts.Count; i++)
                 {
-                    this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
-                    Part main = targetPosts[i];
-                    GetPostEndpoints(main, out Point startPt, out Point endPt);
+                    if (i % ProgressUpdateInterval == 0 || i == targetPosts.Count - 1)
+                        this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
 
-                    ContourPlate plate = null;
+                    PostCache postCache = targetPosts[i];
+                    Part main = postCache.Post;
+                    Point startPt = postCache.StartPoint;
+                    Point endPt = postCache.EndPoint;
+
+                    PlateCache bestPlate = null;
                     Point postNode = null;
-                    double minDist = double.MaxValue;
-                    foreach (ContourPlate cp in targetPlates)
+                    double minDistSq = double.MaxValue;
+                    foreach (PlateCache pc in plateCaches)
                     {
-                        Point plateCog = GetPartCog(cp);
-                        double distStart = Distance.PointToPoint(plateCog, startPt);
-                        double distEnd   = Distance.PointToPoint(plateCog, endPt);
-                        double dist = Math.Min(distStart, distEnd);
-                        if (dist < ProximityLimitMm && dist < minDist)
+                        double distStartSq = DistanceSquared(pc.Cog, startPt);
+                        double distEndSq   = DistanceSquared(pc.Cog, endPt);
+                        double distSq = Math.Min(distStartSq, distEndSq);
+                        if (distSq < proxLimitSq && distSq < minDistSq)
                         {
-                            minDist = dist;
-                            plate = cp;
-                            postNode = distStart <= distEnd ? startPt : endPt;
+                            minDistSq = distSq;
+                            bestPlate = pc;
+                            postNode = distStartSq <= distEndSq ? startPt : endPt;
                         }
                     }
 
-                    if (plate == null) continue;
+                    if (bestPlate == null) continue;
 
-                    string postProf = main.Profile.ProfileString;
-                    string postName = main.Name;
-                    string plateProf = plate.Profile.ProfileString;
-                    string plateName = plate.Name;
-                    var corners = GetCornerDistances(plate, postNode);
-                    double plateVolume = 0;
-                    plate.GetReportProperty("VOLUME", ref plateVolume);
+                    string postProf = postCache.Profile;
+                    string postName = postCache.Name;
+                    string plateProf = bestPlate.Profile;
+                    string plateName = bestPlate.Name;
+                    var corners = GetCornerDistances(bestPlate.Plate, postNode);
+                    double plateVolume = bestPlate.Volume;
 
                     foreach (var sig in signatures)
                     {
@@ -235,6 +267,14 @@ namespace TeklaGroupFinder
             foreach (ContourPoint cp in p.Contour.ContourPoints)
                 d.Add(Math.Round(Distance.PointToPoint(r, new Point(cp.X, cp.Y, cp.Z)), 1));
             d.Sort(); return d;
+        }
+
+        private static double DistanceSquared(Point p1, Point p2)
+        {
+            double dx = p1.X - p2.X;
+            double dy = p1.Y - p2.Y;
+            double dz = p1.Z - p2.Z;
+            return (dx * dx) + (dy * dy) + (dz * dz);
         }
 
         private Point GetPartCog(ModelObject m)
