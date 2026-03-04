@@ -119,7 +119,9 @@ namespace TeklaGroupFinder
                     double minDist = double.MaxValue;
                     foreach (ContourPlate cp in targetPlates)
                     {
-                        double dist = Distance.PointToPoint(topNode, GetPartCog(cp));
+                        Point plateCog = GetPartCog(cp);
+                        var proximityVector = new Vector(plateCog.X - topNode.X, plateCog.Y - topNode.Y, plateCog.Z - topNode.Z);
+                        double dist = proximityVector.GetLength();
                         if (dist < ProximityLimitMm && dist < minDist)
                         {
                             minDist = dist;
