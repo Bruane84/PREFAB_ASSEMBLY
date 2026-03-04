@@ -52,7 +52,13 @@ namespace TeklaGroupFinder
             if (string.IsNullOrEmpty(groupName)) return;
 
             double.TryParse(toleranceTextBox.Text, out double distTolerance);
-            Point refNode = GetPostTopNode(mainPost);
+
+            GetPostEndpoints(mainPost, out Point startPt, out Point endPt);
+            Point capCog  = GetPartCog(capPlate);
+            Point refNode = Distance.PointToPoint(startPt, capCog) <= Distance.PointToPoint(endPt, capCog) ? startPt : endPt;
+
+            double volume = 0;
+            capPlate.GetReportProperty("VOLUME", ref volume);
 
             var signature = new GroupSignature
             {
@@ -60,7 +66,7 @@ namespace TeklaGroupFinder
                 PostProfile = GetProperty(mainPost, "PROFILE"),
                 CapPlateProfile = GetProperty(capPlate, "PROFILE"),
                 CornerDistances = GetCornerDistances(capPlate, refNode),
-                VoidDistances = GetVoidDistances(capPlate, refNode),
+                CapPlateVolume = volume,
                 PartCount = parts.Count,
                 DistanceTolerance = distTolerance > 0 ? distTolerance : 2.0
             };
@@ -73,6 +79,7 @@ namespace TeklaGroupFinder
         }
 
         private const double ProximityLimitMm = 200.0;
+        private const double VolumeToleranceMm3 = 0.5;
 
         private async void findMatchesButton_Click(object sender, EventArgs e)
         {
@@ -113,19 +120,22 @@ namespace TeklaGroupFinder
                 {
                     this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
                     Part main = targetPosts[i];
-                    Point topNode = GetPostTopNode(main);
+                    GetPostEndpoints(main, out Point startPt, out Point endPt);
 
                     ContourPlate plate = null;
+                    Point postNode = null;
                     double minDist = double.MaxValue;
                     foreach (ContourPlate cp in targetPlates)
                     {
                         Point plateCog = GetPartCog(cp);
-                        var proximityVector = new Vector(plateCog.X - topNode.X, plateCog.Y - topNode.Y, plateCog.Z - topNode.Z);
-                        double dist = proximityVector.GetLength();
+                        double distStart = Distance.PointToPoint(plateCog, startPt);
+                        double distEnd   = Distance.PointToPoint(plateCog, endPt);
+                        double dist = Math.Min(distStart, distEnd);
                         if (dist < ProximityLimitMm && dist < minDist)
                         {
                             minDist = dist;
                             plate = cp;
+                            postNode = distStart <= distEnd ? startPt : endPt;
                         }
                     }
 
@@ -133,14 +143,15 @@ namespace TeklaGroupFinder
 
                     string postProf = GetProperty(main, "PROFILE");
                     string plateProf = GetProperty(plate, "PROFILE");
-                    var corners = GetCornerDistances(plate, topNode);
-                    var voids = GetVoidDistances(plate, topNode);
+                    var corners = GetCornerDistances(plate, postNode);
+                    double plateVolume = 0;
+                    plate.GetReportProperty("VOLUME", ref plateVolume);
 
                     foreach (var sig in signatures)
                     {
                         double activeTol = sig.DistanceTolerance > 0 ? sig.DistanceTolerance : globalTol;
 
-                        if (DoSignaturesMatch(sig, postProf, plateProf, corners, voids, activeTol))
+                        if (DoSignaturesMatch(sig, postProf, plateProf, plateVolume, corners, activeTol))
                         {
                             main.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
                             main.Modify();
@@ -169,18 +180,17 @@ namespace TeklaGroupFinder
         }
 
         #region Helper Methods
-        private bool DoSignaturesMatch(GroupSignature s, string postP, string plateP, List<double> c, List<double> v, double t)
+        private bool DoSignaturesMatch(GroupSignature s, string postP, string plateP, double volume, List<double> c, double t)
         {
             if (s.PostProfile.Trim().ToUpper() != postP.Trim().ToUpper() ||
                 s.CapPlateProfile.Trim().ToUpper() != plateP.Trim().ToUpper()) return false;
 
-            if (s.CornerDistances.Count != c.Count || s.VoidDistances.Count != v.Count) return false;
+            if (Math.Abs(s.CapPlateVolume - volume) > VolumeToleranceMm3) return false;
+
+            if (s.CornerDistances.Count != c.Count) return false;
 
             for (int i = 0; i < c.Count; i++)
                 if (Math.Abs(s.CornerDistances[i] - c[i]) > t) return false;
-
-            for (int i = 0; i < v.Count; i++)
-                if (Math.Abs(s.VoidDistances[i] - v[i]) > t) return false;
 
             return true;
         }
@@ -198,14 +208,10 @@ namespace TeklaGroupFinder
             return new Point(x, y, z);
         }
 
-        private Point GetPostTopNode(Part post)
+        private void GetPostEndpoints(Part post, out Point start, out Point end)
         {
-            if (post is Beam beam)
-            {
-                return beam.EndPoint;
-            }
-
-            return GetReportPoint(post, "END");
+            if (post is Beam beam) { start = beam.StartPoint; end = beam.EndPoint; }
+            else { start = GetReportPoint(post, "START"); end = GetReportPoint(post, "END"); }
         }
 
         private List<double> GetCornerDistances(ContourPlate p, Point r)
@@ -213,16 +219,6 @@ namespace TeklaGroupFinder
             var d = new List<double>();
             foreach (ContourPoint cp in p.Contour.ContourPoints)
                 d.Add(Math.Round(Distance.PointToPoint(r, new Point(cp.X, cp.Y, cp.Z)), 1));
-            d.Sort(); return d;
-        }
-
-        private List<double> GetVoidDistances(Part p, Point r)
-        {
-            var d = new List<double>();
-            var bools = p.GetBooleans();
-            while (bools.MoveNext()) if (bools.Current is BooleanPart bp) d.Add(Math.Round(Distance.PointToPoint(r, GetPartCog(bp.OperativePart)), 1));
-            var bolts = p.GetBolts();
-            while (bolts.MoveNext()) if (bolts.Current is BoltGroup bg) foreach (Point pos in bg.BoltPositions) d.Add(Math.Round(Distance.PointToPoint(r, pos), 1));
             d.Sort(); return d;
         }
 
@@ -267,7 +263,7 @@ namespace TeklaGroupFinder
         public string PostProfile { get; set; }
         public string CapPlateProfile { get; set; }
         public List<double> CornerDistances { get; set; }
-        public List<double> VoidDistances { get; set; }
+        public double CapPlateVolume { get; set; }
         public int PartCount { get; set; }
         public double DistanceTolerance { get; set; }
     }
