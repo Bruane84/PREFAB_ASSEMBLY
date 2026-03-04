@@ -82,18 +82,23 @@ namespace TeklaGroupFinder
             var signatures = Directory.GetFiles(path, "*.json")
                 .Select(f => JsonConvert.DeserializeObject<GroupSignature>(File.ReadAllText(f))).ToList();
 
+            var signatureProfiles = new HashSet<string>(
+                signatures.Select(s => s.PostProfile.Trim().ToUpper()));
+
             var targetAssemblies = new List<Assembly>();
-            var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(ModelObject.ModelObjectEnum.ASSEMBLY);
+            var seenIds = new HashSet<int>();
+            var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(ModelObject.ModelObjectEnum.PART);
             while (iter.MoveNext())
             {
-                if (iter.Current is Assembly assy)
+                if (iter.Current is Part part)
                 {
-                    bool hasCapPlate = false;
-                    foreach (object sec in assy.GetSecondaries())
+                    string profileKey = part.Profile.ProfileString.Trim().ToUpper();
+                    if (signatureProfiles.Contains(profileKey))
                     {
-                        if (sec is ContourPlate) { hasCapPlate = true; break; }
+                        Assembly assy = part.GetAssembly() as Assembly;
+                        if (assy != null && seenIds.Add(assy.Identifier.ID))
+                            targetAssemblies.Add(assy);
                     }
-                    if (hasCapPlate) targetAssemblies.Add(assy);
                 }
             }
 
