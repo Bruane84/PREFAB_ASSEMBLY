@@ -1,0 +1,71 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj": {}
+  },
+  "projects": {
+    "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj",
+        "projectName": "TeklaGroupFinder",
+        "projectPath": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj",
+        "packagesPath": "/home/runner/.nuget/packages/",
+        "outputPath": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/runner/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net48"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net48": {
+            "targetAlias": "net48",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net48": {
+          "targetAlias": "net48",
+          "dependencies": {
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.0.3, )",
+              "autoReferenced": true
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            },
+            "Tekla.Common.Geometry": {
+              "target": "Package",
+              "version": "[4.6.4, )"
+            },
+            "Tekla.Structures.Model": {
+              "target": "Package",
+              "version": "[2024.0.0, )"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.102/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

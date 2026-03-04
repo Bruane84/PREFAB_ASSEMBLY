@@ -32,6 +32,7 @@
             this.statusLabel = new System.Windows.Forms.Label();
             this.connectionStatusPanel = new System.Windows.Forms.Panel();
             this.label4 = new System.Windows.Forms.Label();
+            this.processingProgressBar = new System.Windows.Forms.ProgressBar();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.SuspendLayout();
@@ -177,11 +178,20 @@
             this.label4.TabIndex = 7;
             this.label4.Text = "Connection Status:";
             // 
+            // processingProgressBar
+            // 
+            this.processingProgressBar.Location = new System.Drawing.Point(20, 497);
+            this.processingProgressBar.Name = "processingProgressBar";
+            this.processingProgressBar.Size = new System.Drawing.Size(221, 10);
+            this.processingProgressBar.TabIndex = 8;
+            this.processingProgressBar.Visible = false;
+            // 
             // GroupFinderForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(261, 532);
+            this.Controls.Add(this.processingProgressBar);
             this.Controls.Add(this.label4);
             this.Controls.Add(this.connectionStatusPanel);
             this.Controls.Add(this.statusLabel);
@@ -192,7 +202,7 @@
             this.Controls.Add(this.label1);
             this.Name = "GroupFinderForm";
             this.ShowInTaskbar = true;
-            this.Text = "Group Finder";
+            this.Text = "MegaPanelPost Grouping";
             this.TopMost = true;
             //this.Load += new System.EventHandler(this.GroupFinderForm_Load);
             this.groupBox1.ResumeLayout(false);
@@ -221,5 +231,6 @@
         private System.Windows.Forms.CheckBox createSubAssemblyCheckBox;
         private System.Windows.Forms.Panel connectionStatusPanel;
         private System.Windows.Forms.Label label4;
+        private System.Windows.Forms.ProgressBar processingProgressBar;
     }
 }
