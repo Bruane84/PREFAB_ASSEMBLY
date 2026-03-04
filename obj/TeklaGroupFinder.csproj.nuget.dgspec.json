@@ -10,7 +10,7 @@
         "projectUniqueName": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj",
         "projectName": "TeklaGroupFinder",
         "projectPath": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/TeklaGroupFinder.csproj",
-        "packagesPath": "/home/runner/.nuget/packages/",
+        "packagesPath": "/tmp/codeql-scratch-8fb1fac9dca9376d/dbs/csharp/working/packages",
         "outputPath": "/home/runner/work/PREFAB_ASSEMBLY/PREFAB_ASSEMBLY/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
