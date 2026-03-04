@@ -202,7 +202,7 @@
             this.Controls.Add(this.label1);
             this.Name = "GroupFinderForm";
             this.ShowInTaskbar = true;
-            this.Text = "Group Finder";
+            this.Text = "MegaPanelPost Grouping";
             this.TopMost = true;
             //this.Load += new System.EventHandler(this.GroupFinderForm_Load);
             this.groupBox1.ResumeLayout(false);
