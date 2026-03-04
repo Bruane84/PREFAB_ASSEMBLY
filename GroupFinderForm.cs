@@ -96,7 +96,7 @@ namespace TeklaGroupFinder
                     targetPlates.Add(cp);
                 else if (iter.Current is Part part)
                 {
-                    string profileKey = part.Profile.ProfileString.Trim().ToUpper();
+                    string profileKey = GetProperty(part, "PROFILE").Trim().ToUpper();
                     if (signatureProfiles.Contains(profileKey))
                         targetPosts.Add(part);
                 }
@@ -200,6 +200,11 @@ namespace TeklaGroupFinder
 
         private Point GetPostTopNode(Part post)
         {
+            if (post is Beam beam)
+            {
+                return beam.EndPoint;
+            }
+
             return GetReportPoint(post, "END");
         }
 
@@ -223,6 +228,20 @@ namespace TeklaGroupFinder
 
         private Point GetPartCog(ModelObject m)
         {
+            if (m is Part part)
+            {
+                var solid = part.GetSolid();
+                if (solid != null)
+                {
+                    return new Point(
+                        (solid.MinimumPoint.X + solid.MaximumPoint.X) / 2.0,
+                        (solid.MinimumPoint.Y + solid.MaximumPoint.Y) / 2.0,
+                        (solid.MinimumPoint.Z + solid.MaximumPoint.Z) / 2.0
+                    );
+                }
+            }
+
+            // Fallback to report properties
             double x = 0, y = 0, z = 0;
             m.GetReportProperty("COG_X", ref x);
             m.GetReportProperty("COG_Y", ref y);
