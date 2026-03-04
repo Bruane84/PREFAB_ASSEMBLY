@@ -91,72 +91,87 @@ namespace TeklaGroupFinder
             var signatures = Directory.GetFiles(path, "*.json")
                 .Select(f => JsonConvert.DeserializeObject<GroupSignature>(File.ReadAllText(f))).ToList();
 
-            var signatureProfiles = new HashSet<string>(
-                signatures.Select(s => s.PostProfile.Trim().ToUpper()));
-
-            var targetPosts = new List<Part>();
-            var targetPlates = new List<ContourPlate>();
+            // Collect all posts and plates from the model once.
+            var allPosts = new List<Part>();
+            var allPlates = new List<ContourPlate>();
             var iter = MyModel.GetModelObjectSelector().GetAllObjectsWithType(new Type[] { typeof(Part) });
             while (iter.MoveNext())
             {
                 if (iter.Current is ContourPlate cp)
-                    targetPlates.Add(cp);
+                    allPlates.Add(cp);
                 else if (iter.Current is Part part)
-                {
-                    string profileKey = GetProperty(part, "PROFILE").Trim().ToUpper();
-                    if (signatureProfiles.Contains(profileKey))
-                        targetPosts.Add(part);
-                }
+                    allPosts.Add(part);
             }
 
             processingProgressBar.Visible = true;
-            processingProgressBar.Maximum = targetPosts.Count;
+            processingProgressBar.Maximum = allPosts.Count;
             int matchCount = 0;
             double.TryParse(toleranceTextBox.Text, out double globalTol);
 
             await System.Threading.Tasks.Task.Run(() =>
             {
-                for (int i = 0; i < targetPosts.Count; i++)
+                // Cache normalized profiles once to avoid repeated property lookups.
+                var profileCache = allPosts.ToDictionary(
+                    p => p.Identifier.ID,
+                    p => GetProperty(p, "PROFILE").Trim().ToUpper());
+
+                // Track posts already tagged so a post is only matched by the first applicable signature.
+                var taggedPostIds = new HashSet<int>();
+                int processedCount = 0;
+
+                for (int sigIndex = 0; sigIndex < signatures.Count; sigIndex++)
                 {
-                    this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = i + 1; });
-                    Part main = targetPosts[i];
-                    GetPostEndpoints(main, out Point startPt, out Point endPt);
+                    var sig = signatures[sigIndex];
 
-                    ContourPlate plate = null;
-                    Point postNode = null;
-                    double minDist = double.MaxValue;
-                    foreach (ContourPlate cp in targetPlates)
+                    // Build a per-JSON-file selection set: posts whose profile matches this signature
+                    // and that have not already been tagged by an earlier signature.
+                    string sigProfile = sig.PostProfile.Trim().ToUpper();
+                    var selectionSet = allPosts
+                        .Where(p => profileCache[p.Identifier.ID] == sigProfile
+                                 && !taggedPostIds.Contains(p.Identifier.ID))
+                        .ToList();
+
+                    double activeTol = sig.DistanceTolerance > 0 ? sig.DistanceTolerance : globalTol;
+
+                    foreach (Part main in selectionSet)
                     {
-                        Point plateCog = GetPartCog(cp);
-                        double distStart = Distance.PointToPoint(plateCog, startPt);
-                        double distEnd   = Distance.PointToPoint(plateCog, endPt);
-                        double dist = Math.Min(distStart, distEnd);
-                        if (dist < ProximityLimitMm && dist < minDist)
+                        int postId = main.Identifier.ID;
+                        int captured = ++processedCount;
+                        this.Invoke((MethodInvoker)delegate { processingProgressBar.Value = Math.Min(captured, processingProgressBar.Maximum); });
+
+                        GetPostEndpoints(main, out Point startPt, out Point endPt);
+
+                        ContourPlate plate = null;
+                        Point postNode = null;
+                        double minDist = double.MaxValue;
+                        foreach (ContourPlate cp in allPlates)
                         {
-                            minDist = dist;
-                            plate = cp;
-                            postNode = distStart <= distEnd ? startPt : endPt;
+                            Point plateCog = GetPartCog(cp);
+                            double distStart = Distance.PointToPoint(plateCog, startPt);
+                            double distEnd   = Distance.PointToPoint(plateCog, endPt);
+                            double dist = Math.Min(distStart, distEnd);
+                            if (dist < ProximityLimitMm && dist < minDist)
+                            {
+                                minDist = dist;
+                                plate = cp;
+                                postNode = distStart <= distEnd ? startPt : endPt;
+                            }
                         }
-                    }
 
-                    if (plate == null) continue;
+                        if (plate == null) continue;
 
-                    string postProf = GetProperty(main, "PROFILE");
-                    string plateProf = GetProperty(plate, "PROFILE");
-                    var corners = GetCornerDistances(plate, postNode);
-                    double plateVolume = 0;
-                    plate.GetReportProperty("VOLUME", ref plateVolume);
-
-                    foreach (var sig in signatures)
-                    {
-                        double activeTol = sig.DistanceTolerance > 0 ? sig.DistanceTolerance : globalTol;
+                        string postProf = profileCache[postId];
+                        string plateProf = GetProperty(plate, "PROFILE");
+                        var corners = GetCornerDistances(plate, postNode);
+                        double plateVolume = 0;
+                        plate.GetReportProperty("VOLUME", ref plateVolume);
 
                         if (DoSignaturesMatch(sig, postProf, plateProf, plateVolume, corners, activeTol))
                         {
+                            taggedPostIds.Add(postId);
                             main.SetUserProperty(udaNameTextBox.Text, sig.GroupName);
                             main.Modify();
                             matchCount++;
-                            break;
                         }
                     }
 
