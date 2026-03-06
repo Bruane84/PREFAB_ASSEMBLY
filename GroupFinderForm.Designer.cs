@@ -24,7 +24,6 @@
             this.toleranceTextBox = new System.Windows.Forms.TextBox();
             this.createSignatureButton = new System.Windows.Forms.Button();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.createSubAssemblyCheckBox = new System.Windows.Forms.CheckBox();
             this.label3 = new System.Windows.Forms.Label();
             this.udaNameTextBox = new System.Windows.Forms.TextBox();
             this.findMatchesButton = new System.Windows.Forms.Button();
@@ -94,7 +93,6 @@
             // 
             // groupBox2
             // 
-            this.groupBox2.Controls.Add(this.createSubAssemblyCheckBox);
             this.groupBox2.Controls.Add(this.label3);
             this.groupBox2.Controls.Add(this.udaNameTextBox);
             this.groupBox2.Controls.Add(this.findMatchesButton);
@@ -104,16 +102,6 @@
             this.groupBox2.TabIndex = 3;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "2. Find & Group Matches";
-            // 
-            // createSubAssemblyCheckBox
-            // 
-            this.createSubAssemblyCheckBox.AutoSize = true;
-            this.createSubAssemblyCheckBox.Location = new System.Drawing.Point(15, 163);
-            this.createSubAssemblyCheckBox.Name = "createSubAssemblyCheckBox";
-            this.createSubAssemblyCheckBox.Size = new System.Drawing.Size(199, 17);
-            this.createSubAssemblyCheckBox.TabIndex = 6;
-            this.createSubAssemblyCheckBox.Text = "Create Sub-Assemblies Automatically";
-            this.createSubAssemblyCheckBox.UseVisualStyleBackColor = true;
             // 
             // label3
             // 
@@ -228,7 +216,6 @@
         private System.Windows.Forms.TextBox udaNameTextBox;
         private System.Windows.Forms.Button openCatalogueButton;
         private System.Windows.Forms.Label statusLabel;
-        private System.Windows.Forms.CheckBox createSubAssemblyCheckBox;
         private System.Windows.Forms.Panel connectionStatusPanel;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.ProgressBar processingProgressBar;
