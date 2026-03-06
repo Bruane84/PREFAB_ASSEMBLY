@@ -31,6 +31,7 @@ namespace TeklaGroupFinder
                 statusLabel.Text = "Not connected. Please open a Tekla model.";
             }
 
+            toleranceTextBox.Text = "3";
             AddFabricationReportButton();
         }
 
@@ -103,7 +104,7 @@ namespace TeklaGroupFinder
                 CornerDistances = GetCornerDistances(capPlate, refNode),
                 CapPlateVolume = volume,
                 PartCount = parts.Count,
-                DistanceTolerance = distTolerance > 0 ? distTolerance : 2.0
+                DistanceTolerance = distTolerance > 0 ? distTolerance : 3.0
             };
 
             var path = GetDataPath();
