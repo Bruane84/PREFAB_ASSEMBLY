@@ -158,6 +158,10 @@ namespace TeklaGroupFinder
             {
                 if (iter.Current is Part part)
                 {
+                    string exclusionNote = "";
+                    part.GetUserProperty("TW3F_PROJNOTES04", ref exclusionNote);
+                    if (exclusionNote == "KOVACH_POST_THC") continue;
+
                     string profileKey = part.Profile.ProfileString.Trim().ToUpper();
                     string nameKey = part.Name?.Trim().ToUpper() ?? "";
 
@@ -450,6 +454,10 @@ namespace TeklaGroupFinder
             {
                 if (iter.Current is Part p)
                 {
+                    string exclusionNote = "";
+                    p.GetUserProperty("TW3F_PROJNOTES04", ref exclusionNote);
+                    if (exclusionNote == "KOVACH_POST_THC") continue;
+
                     string udaVal = "";
                     if (p.GetUserProperty(UdaName, ref udaVal) && !string.IsNullOrEmpty(udaVal))
                     {
@@ -497,6 +505,10 @@ namespace TeklaGroupFinder
             {
                 if (iter.Current is Part p)
                 {
+                    string exclusionNote = "";
+                    p.GetUserProperty("TW3F_PROJNOTES04", ref exclusionNote);
+                    if (exclusionNote == "KOVACH_POST_THC") continue;
+
                     string udaVal = "";
                     if (p.GetUserProperty(UdaName, ref udaVal) && selectedGroups.Contains(udaVal))
                         objectsToSelect.Add(p);
@@ -770,6 +782,10 @@ namespace TeklaGroupFinder
             {
                 if (iter.Current is Part p)
                 {
+                    string exclusionNote = "";
+                    p.GetUserProperty("TW3F_PROJNOTES04", ref exclusionNote);
+                    if (exclusionNote == "KOVACH_POST_THC") continue;
+
                     string udaVal = "";
                     if (p.GetUserProperty(UdaName, ref udaVal) && !string.IsNullOrEmpty(udaVal))
                     {
